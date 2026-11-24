@@ -82,6 +82,12 @@
         breakevenProgress: document.getElementById('breakeven-progress'),
         breakevenSubtext: document.getElementById('breakeven-subtext'),
         breakevenPrice: document.getElementById('breakeven-price'),
+        potentialBottomPrice: document.getElementById('potential-bottom-price'),
+        bottomDrawdownPct: document.getElementById('bottom-drawdown-pct'),
+        modelAvgPrice: document.getElementById('model-avg-price'),
+        model2022Price: document.getElementById('model-2022-price'),
+        model2015Price: document.getElementById('model-2015-price'),
+        bottomRangeRef: document.getElementById('bottom-range-ref'),
         gaugeNeedle: document.getElementById('gauge-needle-group'),
         gaugeRatioText: document.getElementById('gauge-ratio-text'),
         gaugeZoneLabel: document.getElementById('gauge-zone-label'),
@@ -318,6 +324,37 @@
         el.breakevenPrice.textContent = `$${formatUSD(state.realizedPrice, 0)}`;
         el.realizedCap.textContent = formatCompactTrillion(data.realizedCapUSD);
         el.marketCap.textContent = formatCompactTrillion(data.marketCapUSD);
+
+        // Potential Bottom Model Calculations based on historical cycles
+        // Historical Bottom MVRV: 2015 = 0.60x, 2018 = 0.69x, 2022 = 0.76x -> Average ~0.70x
+        const rp = state.realizedPrice;
+        const avgBottomMvrv = 0.70;
+        const bottomPriceAvg = rp * avgBottomMvrv;
+        const bottomPrice2022 = rp * 0.76;
+        const bottomPrice2015 = rp * 0.60;
+
+        if (el.potentialBottomPrice) {
+            el.potentialBottomPrice.textContent = formatUSD(bottomPriceAvg, 0);
+        }
+        if (el.modelAvgPrice) {
+            el.modelAvgPrice.textContent = `$${formatUSD(bottomPriceAvg, 0)}`;
+        }
+        if (el.model2022Price) {
+            el.model2022Price.textContent = `$${formatUSD(bottomPrice2022, 0)}`;
+        }
+        if (el.model2015Price) {
+            el.model2015Price.textContent = `$${formatUSD(bottomPrice2015, 0)}`;
+        }
+        if (el.bottomRangeRef) {
+            el.bottomRangeRef.textContent = `$${(bottomPrice2015 / 1000).toFixed(1)}k – $${(bottomPrice2022 / 1000).toFixed(1)}k`;
+        }
+
+        // Distance from current price to the average bottom
+        if (el.bottomDrawdownPct && state.btcPrice > 0) {
+            const drawdownPct = ((bottomPriceAvg - state.btcPrice) / state.btcPrice) * 100;
+            const sign = drawdownPct >= 0 ? '+' : '';
+            el.bottomDrawdownPct.textContent = `${sign}${drawdownPct.toFixed(1)}%`;
+        }
 
         // Sub-pane tags
         if (el.indicatorRpLabel) el.indicatorRpLabel.textContent = `$${formatUSD(state.realizedPrice, 0)}`;

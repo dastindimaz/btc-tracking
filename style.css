@@ -304,8 +304,8 @@ body {
 
 .dashboard-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 20px;
+    grid-template-columns: repeat(auto-fit, minmax(235px, 1fr));
+    gap: 16px;
 }
 
 .metric-card {
@@ -334,6 +334,50 @@ body {
 .highlight-card {
     border-color: rgba(59, 130, 246, 0.3);
     background: linear-gradient(180deg, rgba(59, 130, 246, 0.08) 0%, rgba(17, 24, 39, 0.75) 100%);
+}
+
+.bottom-model-card {
+    border-color: rgba(16, 185, 129, 0.35);
+    background: linear-gradient(180deg, rgba(16, 185, 129, 0.08) 0%, rgba(17, 24, 39, 0.8) 100%);
+    box-shadow: 0 0 25px -8px rgba(16, 185, 129, 0.15);
+}
+
+.badge-bottom {
+    background: rgba(16, 185, 129, 0.18);
+    color: var(--color-green);
+    border: 1px solid rgba(16, 185, 129, 0.4);
+}
+
+.text-bottom {
+    color: var(--color-green);
+}
+
+.bottom-scenarios-mini {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    margin-top: 10px;
+    padding-top: 10px;
+    border-top: 1px dashed rgba(255, 255, 255, 0.08);
+}
+
+.mini-scenario-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-size: 0.76rem;
+    color: var(--text-secondary);
+}
+
+.mini-scenario-row .scenario-name {
+    flex: 1;
+    margin-left: 6px;
+}
+
+.scenario-dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
 }
 
 .card-header {

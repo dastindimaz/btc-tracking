@@ -205,6 +205,50 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Card 5: Potential BTC Bottom Price (Historical Cycles Model) -->
+            <div class="metric-card bottom-model-card" id="card-bottom-model">
+                <div class="card-header">
+                    <span class="card-label">POTENSIAL BTC BOTTOM</span>
+                    <span class="badge badge-bottom">HISTORIS SIKLUS</span>
+                </div>
+                <div class="card-body">
+                    <div class="price-container">
+                        <span class="currency-symbol">$</span>
+                        <span id="potential-bottom-price" class="main-metric mono text-bottom">37,450</span>
+                    </div>
+                    <div class="metric-delta text-negative" id="bottom-drawdown-delta">
+                        <span>Jarak jika ke bottom: <strong id="bottom-drawdown-pct" class="mono">-39.8%</strong></span>
+                    </div>
+                    <div class="bottom-scenarios-mini">
+                        <div class="mini-scenario-row">
+                            <span class="scenario-dot dot-green"></span>
+                            <span class="scenario-name">Rata-rata Siklus (0.70x):</span>
+                            <strong id="model-avg-price" class="mono">$37,450</strong>
+                        </div>
+                        <div class="mini-scenario-row">
+                            <span class="scenario-dot dot-blue"></span>
+                            <span class="scenario-name">Siklus 2022 FTX (0.76x):</span>
+                            <strong id="model-2022-price" class="mono">$40,660</strong>
+                        </div>
+                        <div class="mini-scenario-row">
+                            <span class="scenario-dot dot-red"></span>
+                            <span class="scenario-name">Ekstrem 2015 (0.60x):</span>
+                            <strong id="model-2015-price" class="mono">$32,100</strong>
+                        </div>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <div class="sub-stat">
+                        <span>Rentang Akumulasi:</span>
+                        <strong class="mono" id="bottom-range-ref">$32.1k – $40.7k</strong>
+                    </div>
+                    <div class="sub-stat">
+                        <span>Model:</span>
+                        <strong class="mono">MVRV &lt; 0.75x</strong>
+                    </div>
+                </div>
+            </div>
         </main>
 
         <!-- Speedometer & Visual Zone Section -->
