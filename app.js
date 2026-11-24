@@ -1,11 +1,23 @@
 /**
  * BTC/USD Real-Time MVRV Tracker - Core Logic
- * Handles real-time WebSocket streams, MVRV computations, UI updates,
- * Chart.js rendering, audio alerts, and on-chain metrics sync.
+ * TradingView-Style Dual-Pane Layout (BTC Price Top + MVRV Indicator Bottom)
+ * Multi-Timeframe with Favorite Star System ⭐ and Binance Klines Sync
  */
 
 (function () {
     'use strict';
+
+    // Available Timeframes Definition
+    const AVAILABLE_TIMEFRAMES = [
+        { id: '1s', label: '1s (Live)', isKline: false, limit: 60 },
+        { id: '1m', label: '1m', isKline: true, interval: '1m', limit: 70 },
+        { id: '5m', label: '5m', isKline: true, interval: '5m', limit: 70 },
+        { id: '15m', label: '15m', isKline: true, interval: '15m', limit: 70 },
+        { id: '1h', label: '1h', isKline: true, interval: '1h', limit: 70 },
+        { id: '4h', label: '4h', isKline: true, interval: '4h', limit: 70 },
+        { id: '1d', label: '1D', isKline: true, interval: '1d', limit: 70 },
+        { id: '1w', label: '1W', isKline: true, interval: '1w', limit: 52 }
+    ];
 
     // Global Application State
     const state = {
@@ -22,13 +34,30 @@
         wsSource: 'binance',         // 'binance' | 'coinbase'
         soundEnabled: true,
         chartPaused: false,
-        maxChartPoints: 50,
+        currentTimeframe: '1m',      // Default active timeframe
+        favoriteTimeframes: ['1s', '1m', '5m', '15m', '1h', '1d'], // Pinned favorites
+        klineData: [],               // Stores candles: [{time, o, h, l, c, mvrv}]
+        tickBuffer: [],              // Stores tick buffer for '1s'
         lastTickTime: null,
         ws: null,
         reconnectTimer: null,
         restFallbackTimer: null,
         audioCtx: null
     };
+
+    // Load persisted favorites from localStorage if present
+    try {
+        const savedFavorites = localStorage.getItem('tv_mvrv_favorites');
+        if (savedFavorites) {
+            state.favoriteTimeframes = JSON.parse(savedFavorites);
+        }
+        const savedTf = localStorage.getItem('tv_mvrv_active_tf');
+        if (savedTf && AVAILABLE_TIMEFRAMES.some(t => t.id === savedTf)) {
+            state.currentTimeframe = savedTf;
+        }
+    } catch (e) {
+        console.warn('Could not load localStorage preferences', e);
+    }
 
     // DOM Elements Cache
     const el = {
@@ -85,12 +114,27 @@
         soundToggle: document.getElementById('sound-toggle'),
         soundIconOn: document.getElementById('sound-icon-on'),
         soundIconOff: document.getElementById('sound-icon-off'),
+
+        // TradingView Toolbar & Panes Elements
+        tvTfBar: document.getElementById('tv-tf-bar'),
+        btnTfDropdown: document.getElementById('btn-tf-dropdown'),
+        tfDropdownMenu: document.getElementById('tf-dropdown-menu'),
+        tfOptionsList: document.getElementById('tf-options-list'),
+        currentTfLabel: document.getElementById('current-tf-label'),
+        panePriceLive: document.getElementById('pane-price-live'),
+        indicatorRpLabel: document.getElementById('indicator-rp-label'),
+        indicatorLiveTag: document.getElementById('indicator-live-tag'),
+        ohlcO: document.getElementById('ohlc-o'),
+        ohlcH: document.getElementById('ohlc-h'),
+        ohlcL: document.getElementById('ohlc-l'),
+        ohlcC: document.getElementById('ohlc-c'),
         btnPauseChart: document.getElementById('btn-pause-chart'),
-        btnClearChart: document.getElementById('btn-clear-chart'),
-        timeFilterBtns: document.querySelectorAll('.btn-filter')
+        btnResetZoom: document.getElementById('btn-reset-zoom')
     };
 
-    let chartInstance = null;
+    // Chart instances
+    let priceChartInstance = null;
+    let mvrvChartInstance = null;
 
     // ===================================================================
     // Audio Synthesizer (Web Audio API)
@@ -264,8 +308,7 @@
             el.breakevenSubtext.textContent = `Harga pasar berada ${Math.abs(percentFromRP)}% DI BAWAH basis biaya investor (Zona Diskon Ekstrem).`;
         }
 
-        // Breakeven progress bar (capped between 0% and 100%)
-        // Normalized around 0.5x to 3.0x
+        // Breakeven progress bar
         let progressPercent = ((state.mvrvRatio - 0.5) / (3.5 - 0.5)) * 100;
         progressPercent = Math.max(5, Math.min(100, progressPercent));
         el.breakevenProgress.style.width = `${progressPercent}%`;
@@ -275,6 +318,11 @@
         el.breakevenPrice.textContent = `$${formatUSD(state.realizedPrice, 0)}`;
         el.realizedCap.textContent = formatCompactTrillion(data.realizedCapUSD);
         el.marketCap.textContent = formatCompactTrillion(data.marketCapUSD);
+
+        // Sub-pane tags
+        if (el.indicatorRpLabel) el.indicatorRpLabel.textContent = `$${formatUSD(state.realizedPrice, 0)}`;
+        if (el.indicatorLiveTag) el.indicatorLiveTag.textContent = `${state.mvrvRatio.toFixed(3)}x`;
+        if (el.panePriceLive) el.panePriceLive.textContent = `$${formatUSD(state.btcPrice, 2)}`;
 
         // Update Speedometer Needle
         updateSpeedometer(state.mvrvRatio, data.zoneLabel, data.badgeColor);
@@ -298,27 +346,17 @@
     }
 
     function updateSpeedometer(ratio, label, color) {
-        // Needle angle calculation
-        // MVRV 0.0 -> -90 deg
-        // MVRV 1.0 -> -45 deg
-        // MVRV 2.4 -> +20 deg
-        // MVRV 3.7 -> +60 deg
-        // MVRV >= 4.5 -> +90 deg
         let angle = -90;
         if (ratio <= 1.0) {
-            // 0.0 to 1.0 maps to -90 to -45
             const t = Math.max(0, ratio) / 1.0;
             angle = -90 + t * 45;
         } else if (ratio <= 2.4) {
-            // 1.0 to 2.4 maps to -45 to +20
             const t = (ratio - 1.0) / (2.4 - 1.0);
             angle = -45 + t * 65;
         } else if (ratio <= 3.7) {
-            // 2.4 to 3.7 maps to +20 to +65
             const t = (ratio - 2.4) / (3.7 - 2.4);
             angle = 20 + t * 45;
         } else {
-            // 3.7 to 5.0 maps to +65 to +90
             const t = Math.min(1.0, (ratio - 3.7) / (5.0 - 3.7));
             angle = 65 + t * 25;
         }
@@ -343,6 +381,415 @@
         if (el.targetP20) el.targetP20.textContent = `$${formatUSD(rp * 2.0, 0)}`;
         if (el.targetP24) el.targetP24.textContent = `$${formatUSD(rp * 2.4, 0)}`;
         if (el.targetP37) el.targetP37.textContent = `$${formatUSD(rp * 3.7, 0)}`;
+    }
+
+    // ===================================================================
+    // TradingView Toolbar & Favorite Star System ⭐
+    // ===================================================================
+    function saveFavorites() {
+        try {
+            localStorage.setItem('tv_mvrv_favorites', JSON.stringify(state.favoriteTimeframes));
+            localStorage.setItem('tv_mvrv_active_tf', state.currentTimeframe);
+        } catch (e) {}
+    }
+
+    function renderTimeframeToolbar() {
+        if (!el.tvTfBar) return;
+        el.tvTfBar.innerHTML = '';
+
+        // Render each favorite timeframe button
+        AVAILABLE_TIMEFRAMES.forEach(tf => {
+            if (state.favoriteTimeframes.includes(tf.id)) {
+                const btn = document.createElement('button');
+                btn.className = `tv-tf-btn ${tf.id === state.currentTimeframe ? 'active' : ''}`;
+                btn.textContent = tf.id;
+                btn.title = tf.label;
+                btn.addEventListener('click', () => switchTimeframe(tf.id));
+                el.tvTfBar.appendChild(btn);
+            }
+        });
+
+        // Update current TF label in pane
+        const currentObj = AVAILABLE_TIMEFRAMES.find(t => t.id === state.currentTimeframe);
+        if (el.currentTfLabel && currentObj) {
+            el.currentTfLabel.textContent = currentObj.label;
+        }
+
+        renderDropdownOptions();
+    }
+
+    function renderDropdownOptions() {
+        if (!el.tfOptionsList) return;
+        el.tfOptionsList.innerHTML = '';
+
+        AVAILABLE_TIMEFRAMES.forEach(tf => {
+            const isFav = state.favoriteTimeframes.includes(tf.id);
+            const isActive = state.currentTimeframe === tf.id;
+
+            const row = document.createElement('div');
+            row.className = `tf-item-row ${isActive ? 'active' : ''}`;
+
+            const labelSpan = document.createElement('span');
+            labelSpan.textContent = tf.label;
+            labelSpan.addEventListener('click', () => {
+                switchTimeframe(tf.id);
+                el.tfDropdownMenu.classList.add('hidden');
+            });
+
+            const starBtn = document.createElement('button');
+            starBtn.className = `star-btn ${isFav ? 'starred' : ''}`;
+            starBtn.innerHTML = isFav ? '★' : '☆';
+            starBtn.title = isFav ? 'Hapus dari favorit' : 'Tambahkan ke favorit toolbar';
+            starBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                toggleFavoriteTimeframe(tf.id);
+            });
+
+            row.appendChild(labelSpan);
+            row.appendChild(starBtn);
+            el.tfOptionsList.appendChild(row);
+        });
+    }
+
+    function toggleFavoriteTimeframe(tfId) {
+        const idx = state.favoriteTimeframes.indexOf(tfId);
+        if (idx > -1) {
+            // Prevent removing if it's the last one
+            if (state.favoriteTimeframes.length > 1) {
+                state.favoriteTimeframes.splice(idx, 1);
+            }
+        } else {
+            state.favoriteTimeframes.push(tfId);
+        }
+        saveFavorites();
+        renderTimeframeToolbar();
+    }
+
+    function switchTimeframe(tfId) {
+        if (state.currentTimeframe === tfId) return;
+        state.currentTimeframe = tfId;
+        saveFavorites();
+        renderTimeframeToolbar();
+
+        const tfConfig = AVAILABLE_TIMEFRAMES.find(t => t.id === tfId);
+        if (!tfConfig) return;
+
+        if (tfConfig.isKline) {
+            fetchBinanceKlines(tfConfig.interval, tfConfig.limit);
+        } else {
+            // Switch to Live Tick buffer
+            loadLiveTickBuffer();
+        }
+    }
+
+    // ===================================================================
+    // Binance Klines Data Fetcher
+    // ===================================================================
+    async function fetchBinanceKlines(interval, limit = 70) {
+        try {
+            const url = `https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=${interval}&limit=${limit}`;
+            const res = await fetch(url);
+            if (!res.ok) throw new Error('Kline fetch failed');
+
+            const rawKlines = await res.json();
+            // Kline format: [openTime, open, high, low, close, volume, closeTime, ...]
+            state.klineData = rawKlines.map(k => {
+                const openTime = new Date(k[0]);
+                let timeStr = '';
+                if (interval.includes('d') || interval.includes('w')) {
+                    timeStr = openTime.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' });
+                } else {
+                    timeStr = openTime.toTimeString().split(' ')[0].substring(0, 5); // HH:MM
+                }
+
+                const open = parseFloat(k[1]);
+                const high = parseFloat(k[2]);
+                const low = parseFloat(k[3]);
+                const close = parseFloat(k[4]);
+                const mvrv = close / state.realizedPrice;
+
+                return { time: timeStr, o: open, h: high, l: low, c: close, mvrv: mvrv, timestamp: k[0] };
+            });
+
+            // Update OHLC display from the latest candle
+            if (state.klineData.length > 0) {
+                const last = state.klineData[state.klineData.length - 1];
+                updateOHLCDisplay(last.o, last.h, last.l, last.c);
+            }
+
+            // Sync charts with Klines
+            renderChartsFromData(state.klineData);
+        } catch (err) {
+            console.warn('Failed to load klines, falling back to ticks', err);
+            loadLiveTickBuffer();
+        }
+    }
+
+    function loadLiveTickBuffer() {
+        if (state.tickBuffer.length === 0 && state.btcPrice > 0) {
+            const nowStr = new Date().toTimeString().split(' ')[0];
+            state.tickBuffer.push({
+                time: nowStr,
+                c: state.btcPrice,
+                mvrv: state.btcPrice / state.realizedPrice
+            });
+        }
+        renderChartsFromData(state.tickBuffer);
+        updateOHLCDisplay(state.btcPrice, state.high24h, state.low24h, state.btcPrice);
+    }
+
+    function updateOHLCDisplay(o, h, l, c) {
+        if (el.ohlcO) el.ohlcO.textContent = formatUSD(o, 2);
+        if (el.ohlcH) el.ohlcH.textContent = formatUSD(h, 2);
+        if (el.ohlcL) el.ohlcL.textContent = formatUSD(l, 2);
+        if (el.ohlcC) el.ohlcC.textContent = formatUSD(c, 2);
+    }
+
+    // ===================================================================
+    // TradingView-Style Dual Chart.js Renderer
+    // ===================================================================
+    function initDualCharts() {
+        const priceCanvas = document.getElementById('priceChart');
+        const mvrvCanvas = document.getElementById('mvrvChart');
+        if (!priceCanvas || !mvrvCanvas) return;
+
+        const ctxPrice = priceCanvas.getContext('2d');
+        const ctxMVRV = mvrvCanvas.getContext('2d');
+
+        // Upper Pane: BTC/USD Price Chart
+        const priceGrad = ctxPrice.createLinearGradient(0, 0, 0, 280);
+        priceGrad.addColorStop(0, 'rgba(247, 147, 26, 0.28)');
+        priceGrad.addColorStop(1, 'rgba(247, 147, 26, 0.0)');
+
+        priceChartInstance = new Chart(ctxPrice, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'BTC/USD Price',
+                    data: [],
+                    borderColor: '#F7931A',
+                    backgroundColor: priceGrad,
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.2,
+                    pointRadius: 0,
+                    pointHoverRadius: 4,
+                    pointHoverBackgroundColor: '#FFFFFF',
+                    pointHoverBorderColor: '#F7931A'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                        titleColor: '#94a3b8',
+                        bodyColor: '#F7931A',
+                        borderColor: 'rgba(247, 147, 26, 0.3)',
+                        borderWidth: 1,
+                        padding: 10,
+                        callbacks: {
+                            label: (context) => `Harga BTC: $${formatUSD(context.parsed.y, 2)}`
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { color: 'rgba(255, 255, 255, 0.03)' },
+                        ticks: {
+                            color: '#64748b',
+                            font: { family: 'JetBrains Mono', size: 10 },
+                            maxTicksLimit: 10
+                        }
+                    },
+                    y: {
+                        position: 'right',
+                        grid: { color: 'rgba(255, 255, 255, 0.04)' },
+                        ticks: {
+                            color: '#F7931A',
+                            font: { family: 'JetBrains Mono', size: 10 },
+                            callback: v => `$${v.toLocaleString()}`
+                        }
+                    }
+                }
+            }
+        });
+
+        // Lower Pane: MVRV Indicator Sub-Pane
+        const mvrvGrad = ctxMVRV.createLinearGradient(0, 0, 0, 150);
+        mvrvGrad.addColorStop(0, 'rgba(59, 130, 246, 0.2)');
+        mvrvGrad.addColorStop(1, 'rgba(59, 130, 246, 0.0)');
+
+        mvrvChartInstance = new Chart(ctxMVRV, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: 'MVRV Ratio',
+                        data: [],
+                        borderColor: '#3B82F6',
+                        backgroundColor: mvrvGrad,
+                        borderWidth: 2,
+                        fill: true,
+                        tension: 0.2,
+                        pointRadius: 0,
+                        pointHoverRadius: 4,
+                        pointHoverBackgroundColor: '#FFFFFF',
+                        pointHoverBorderColor: '#3B82F6'
+                    },
+                    // Level 3.70 (Cycle Top - Red)
+                    {
+                        label: 'Top 3.7x',
+                        data: [],
+                        borderColor: 'rgba(239, 68, 68, 0.7)',
+                        borderWidth: 1.2,
+                        borderDash: [4, 4],
+                        pointRadius: 0,
+                        fill: false
+                    },
+                    // Level 2.40 (Overheated - Orange)
+                    {
+                        label: 'Overheated 2.4x',
+                        data: [],
+                        borderColor: 'rgba(245, 158, 11, 0.7)',
+                        borderWidth: 1.2,
+                        borderDash: [4, 4],
+                        pointRadius: 0,
+                        fill: false
+                    },
+                    // Level 1.00 (Breakeven - Green)
+                    {
+                        label: 'Breakeven 1.0x',
+                        data: [],
+                        borderColor: 'rgba(16, 185, 129, 0.7)',
+                        borderWidth: 1.2,
+                        borderDash: [4, 4],
+                        pointRadius: 0,
+                        fill: false
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgba(15, 23, 42, 0.95)',
+                        titleColor: '#94a3b8',
+                        bodyColor: '#3B82F6',
+                        borderColor: 'rgba(59, 130, 246, 0.3)',
+                        borderWidth: 1,
+                        padding: 8,
+                        callbacks: {
+                            label: (context) => {
+                                if (context.datasetIndex === 0) {
+                                    return `MVRV Ratio: ${context.parsed.y.toFixed(3)}x`;
+                                }
+                                return null;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { color: 'rgba(255, 255, 255, 0.03)' },
+                        ticks: {
+                            color: '#64748b',
+                            font: { family: 'JetBrains Mono', size: 10 },
+                            maxTicksLimit: 10
+                        }
+                    },
+                    y: {
+                        position: 'right',
+                        suggestedMin: 0.5,
+                        suggestedMax: 3.8,
+                        grid: { color: 'rgba(255, 255, 255, 0.04)' },
+                        ticks: {
+                            color: '#3B82F6',
+                            font: { family: 'JetBrains Mono', size: 10 },
+                            callback: v => `${v.toFixed(1)}x`
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    function renderChartsFromData(dataArray) {
+        if (!priceChartInstance || !mvrvChartInstance) return;
+
+        const labels = dataArray.map(d => d.time);
+        const prices = dataArray.map(d => d.c);
+        const mvrvs = dataArray.map(d => d.mvrv);
+
+        const count = labels.length;
+        const line37 = new Array(count).fill(3.70);
+        const line24 = new Array(count).fill(2.40);
+        const line10 = new Array(count).fill(1.00);
+
+        // Update Price Chart
+        priceChartInstance.data.labels = labels;
+        priceChartInstance.data.datasets[0].data = prices;
+        priceChartInstance.update('none');
+
+        // Update MVRV Chart
+        mvrvChartInstance.data.labels = labels;
+        mvrvChartInstance.data.datasets[0].data = mvrvs;
+        mvrvChartInstance.data.datasets[1].data = line37;
+        mvrvChartInstance.data.datasets[2].data = line24;
+        mvrvChartInstance.data.datasets[3].data = line10;
+        mvrvChartInstance.update('none');
+    }
+
+    function updateLiveTickInCharts(timeLabel, currentPrice, currentMvrv) {
+        if (state.chartPaused) return;
+
+        const isTickTf = state.currentTimeframe === '1s';
+
+        if (isTickTf) {
+            // Push to tickBuffer (max 60 ticks)
+            state.tickBuffer.push({ time: timeLabel, c: currentPrice, mvrv: currentMvrv });
+            while (state.tickBuffer.length > 60) {
+                state.tickBuffer.shift();
+            }
+            renderChartsFromData(state.tickBuffer);
+            updateOHLCDisplay(currentPrice, state.high24h, state.low24h, currentPrice);
+        } else {
+            // Update latest candle of active timeframe
+            if (state.klineData && state.klineData.length > 0) {
+                const lastCandle = state.klineData[state.klineData.length - 1];
+                lastCandle.c = currentPrice;
+                lastCandle.mvrv = currentMvrv;
+                if (currentPrice > lastCandle.h) lastCandle.h = currentPrice;
+                if (currentPrice < lastCandle.l) lastCandle.l = currentPrice;
+
+                updateOHLCDisplay(lastCandle.o, lastCandle.h, lastCandle.l, lastCandle.c);
+
+                // Update the last point in both chart datasets
+                const lastIdx = priceChartInstance.data.datasets[0].data.length - 1;
+                if (lastIdx >= 0) {
+                    priceChartInstance.data.datasets[0].data[lastIdx] = currentPrice;
+                    mvrvChartInstance.data.datasets[0].data[lastIdx] = currentMvrv;
+                    priceChartInstance.update('none');
+                    mvrvChartInstance.update('none');
+                }
+            }
+        }
     }
 
     // ===================================================================
@@ -399,8 +846,6 @@
         state.ws.onmessage = (event) => {
             try {
                 const data = JSON.parse(event.data);
-                // Binance ticker payload:
-                // c: current price, h: high, l: low, P: price change percent
                 const currentPrice = parseFloat(data.c);
                 const high = parseFloat(data.h);
                 const low = parseFloat(data.l);
@@ -479,7 +924,6 @@
         }, 3500);
     }
 
-    // Fallback REST polling if WebSocket is firewalled or blocked
     function startRestFallback() {
         if (state.restFallbackTimer) return;
         const fetchRest = async () => {
@@ -519,7 +963,7 @@
         // Price Flash Animation
         if (state.prevPrice && state.btcPrice !== state.prevPrice) {
             el.btcPrice.classList.remove('price-flash-up', 'price-flash-down');
-            void el.btcPrice.offsetWidth; // Trigger reflow
+            void el.btcPrice.offsetWidth;
             if (state.btcPrice > state.prevPrice) {
                 el.btcPrice.classList.add('price-flash-up');
             } else {
@@ -540,151 +984,8 @@
         // Compute MVRV
         computeMVRV();
 
-        // Push data to Chart
-        if (!state.chartPaused) {
-            pushChartData(state.lastTickTime, state.btcPrice, state.mvrvRatio);
-        }
-    }
-
-    // ===================================================================
-    // Chart.js Real-Time Dual-Axis Chart
-    // ===================================================================
-    function initChart() {
-        const canvas = document.getElementById('realtimeChart');
-        if (!canvas) return;
-
-        const ctx = canvas.getContext('2d');
-
-        // Create gradient fills
-        const btcGradient = ctx.createLinearGradient(0, 0, 0, 300);
-        btcGradient.addColorStop(0, 'rgba(247, 147, 26, 0.25)');
-        btcGradient.addColorStop(1, 'rgba(247, 147, 26, 0.0)');
-
-        const mvrvGradient = ctx.createLinearGradient(0, 0, 0, 300);
-        mvrvGradient.addColorStop(0, 'rgba(59, 130, 246, 0.25)');
-        mvrvGradient.addColorStop(1, 'rgba(59, 130, 246, 0.0)');
-
-        chartInstance = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: [],
-                datasets: [
-                    {
-                        label: 'BTC/USD Price',
-                        data: [],
-                        borderColor: '#F7931A',
-                        backgroundColor: btcGradient,
-                        borderWidth: 2,
-                        fill: true,
-                        tension: 0.3,
-                        pointRadius: 0,
-                        pointHoverRadius: 4,
-                        yAxisID: 'yPrice'
-                    },
-                    {
-                        label: 'MVRV Ratio',
-                        data: [],
-                        borderColor: '#3B82F6',
-                        backgroundColor: mvrvGradient,
-                        borderWidth: 2.5,
-                        fill: false,
-                        tension: 0.3,
-                        pointRadius: 0,
-                        pointHoverRadius: 5,
-                        yAxisID: 'yMVRV'
-                    }
-                ]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                animation: false,
-                interaction: {
-                    mode: 'index',
-                    intersect: false
-                },
-                plugins: {
-                    legend: {
-                        display: true,
-                        position: 'top',
-                        labels: {
-                            color: '#9ca3af',
-                            font: { family: 'Plus Jakarta Sans', size: 12, weight: '600' },
-                            usePointStyle: true,
-                            pointStyle: 'circle'
-                        }
-                    },
-                    tooltip: {
-                        backgroundColor: 'rgba(17, 24, 39, 0.95)',
-                        titleColor: '#f3f4f6',
-                        bodyColor: '#d1d5db',
-                        borderColor: 'rgba(255, 255, 255, 0.1)',
-                        borderWidth: 1,
-                        padding: 10,
-                        callbacks: {
-                            label: function (context) {
-                                if (context.dataset.yAxisID === 'yPrice') {
-                                    return `BTC Price: $${formatUSD(context.parsed.y, 2)}`;
-                                } else {
-                                    return `MVRV Ratio: ${context.parsed.y.toFixed(3)}x`;
-                                }
-                            }
-                        }
-                    }
-                },
-                scales: {
-                    x: {
-                        grid: { color: 'rgba(255, 255, 255, 0.04)' },
-                        ticks: {
-                            color: '#6b7280',
-                            font: { family: 'JetBrains Mono', size: 10 },
-                            maxTicksLimit: 8
-                        }
-                    },
-                    yPrice: {
-                        type: 'linear',
-                        position: 'left',
-                        grid: { color: 'rgba(255, 255, 255, 0.05)' },
-                        ticks: {
-                            color: '#F7931A',
-                            font: { family: 'JetBrains Mono', size: 10 },
-                            callback: value => `$${value.toLocaleString()}`
-                        }
-                    },
-                    yMVRV: {
-                        type: 'linear',
-                        position: 'right',
-                        grid: { drawOnChartArea: false },
-                        ticks: {
-                            color: '#3B82F6',
-                            font: { family: 'JetBrains Mono', size: 10 },
-                            callback: value => `${value.toFixed(2)}x`
-                        }
-                    }
-                }
-            }
-        });
-    }
-
-    function pushChartData(timeLabel, price, mvrv) {
-        if (!chartInstance) return;
-
-        const labels = chartInstance.data.labels;
-        const priceData = chartInstance.data.datasets[0].data;
-        const mvrvData = chartInstance.data.datasets[1].data;
-
-        labels.push(timeLabel);
-        priceData.push(price);
-        mvrvData.push(mvrv);
-
-        // Cap to max points
-        while (labels.length > state.maxChartPoints) {
-            labels.shift();
-            priceData.shift();
-            mvrvData.shift();
-        }
-
-        chartInstance.update('none'); // Update without animation lag
+        // Push data to Dual Charts
+        updateLiveTickInCharts(state.lastTickTime, state.btcPrice, state.mvrvRatio);
     }
 
     // ===================================================================
@@ -735,7 +1036,6 @@
     // Settings & Parameter Management
     // ===================================================================
     function setupSettingsHandlers() {
-        // Toggle Settings Panel
         el.settingsToggle.addEventListener('click', () => {
             el.settingsPanel.classList.toggle('hidden');
         });
@@ -744,7 +1044,6 @@
             el.settingsPanel.classList.add('hidden');
         });
 
-        // Apply Custom Parameters
         el.btnApplyParams.addEventListener('click', () => {
             const customRP = parseFloat(el.inputRealizedPrice.value);
             const customSupply = parseFloat(el.inputSupply.value);
@@ -763,11 +1062,16 @@
             }
 
             computeMVRV();
+            // Refresh klines with new RP
+            const tfConfig = AVAILABLE_TIMEFRAMES.find(t => t.id === state.currentTimeframe);
+            if (tfConfig && tfConfig.isKline) {
+                fetchBinanceKlines(tfConfig.interval, tfConfig.limit);
+            }
+
             el.settingsPanel.classList.add('hidden');
             playTone(660, 'sine', 0.15, 0.1);
         });
 
-        // Reset to Defaults
         el.btnResetParams.addEventListener('click', () => {
             state.realizedPrice = 53500.0;
             state.circulatingSupply = 19780000;
@@ -777,13 +1081,11 @@
             playTone(440, 'sine', 0.1, 0.1);
         });
 
-        // Sync On-Chain API
         el.btnSyncOnchain.addEventListener('click', async () => {
             el.btnSyncOnchain.textContent = 'Menyinkronkan...';
             el.btnSyncOnchain.disabled = true;
 
             try {
-                // Attempt fetching BGeometrics or LookIntoBitcoin API
                 const resp = await fetch('https://bitcoin-data.com/v1/realized-price/last');
                 if (resp.ok) {
                     const data = await resp.json();
@@ -798,7 +1100,7 @@
                     throw new Error('API request failed');
                 }
             } catch (err) {
-                console.warn('Direct on-chain fetch blocked by CORS or network, using latest benchmark $53,500', err);
+                console.warn('Direct on-chain fetch blocked, using latest benchmark $53,500', err);
                 alert('Informasi: Nilai Realized Price disinkronkan ke benchmark on-chain terbaru (~$53,500). Anda juga dapat memasukkan nilai kustom secara manual.');
             } finally {
                 el.btnSyncOnchain.textContent = 'Sinkron On-Chain';
@@ -806,7 +1108,6 @@
             }
         });
 
-        // Sound Toggle
         el.soundToggle.addEventListener('click', () => {
             state.soundEnabled = !state.soundEnabled;
             if (state.soundEnabled) {
@@ -819,47 +1120,65 @@
             }
         });
 
-        // Chart Pause & Clear
-        el.btnPauseChart.addEventListener('click', () => {
-            state.chartPaused = !state.chartPaused;
-            el.btnPauseChart.textContent = state.chartPaused ? 'Lanjutkan Grafik' : 'Jeda Grafik';
-            if (state.chartPaused) {
-                el.btnPauseChart.classList.add('btn-primary');
-                el.btnPauseChart.classList.remove('btn-secondary');
-            } else {
-                el.btnPauseChart.classList.remove('btn-primary');
-                el.btnPauseChart.classList.add('btn-secondary');
-            }
-        });
-
-        el.btnClearChart.addEventListener('click', () => {
-            if (chartInstance) {
-                chartInstance.data.labels = [];
-                chartInstance.data.datasets[0].data = [];
-                chartInstance.data.datasets[1].data = [];
-                chartInstance.update();
-            }
-        });
-
-        // Time Filters
-        el.timeFilterBtns.forEach(btn => {
-            btn.addEventListener('click', () => {
-                el.timeFilterBtns.forEach(b => b.classList.remove('active'));
-                btn.classList.add('active');
-                state.maxChartPoints = parseInt(btn.getAttribute('data-points'), 10) || 50;
+        // Timeframe Dropdown toggle
+        if (el.btnTfDropdown) {
+            el.btnTfDropdown.addEventListener('click', (e) => {
+                e.stopPropagation();
+                el.tfDropdownMenu.classList.toggle('hidden');
             });
-        });
+
+            document.addEventListener('click', () => {
+                if (el.tfDropdownMenu) el.tfDropdownMenu.classList.add('hidden');
+            });
+        }
+
+        // Pause Chart Button
+        if (el.btnPauseChart) {
+            el.btnPauseChart.addEventListener('click', () => {
+                state.chartPaused = !state.chartPaused;
+                el.btnPauseChart.textContent = state.chartPaused ? 'Lanjutkan' : 'Jeda';
+                if (state.chartPaused) {
+                    el.btnPauseChart.style.background = 'rgba(239, 68, 68, 0.2)';
+                    el.btnPauseChart.style.color = '#ef4444';
+                } else {
+                    el.btnPauseChart.style.background = '';
+                    el.btnPauseChart.style.color = '';
+                }
+            });
+        }
+
+        // Reset Zoom Button
+        if (el.btnResetZoom) {
+            el.btnResetZoom.addEventListener('click', () => {
+                const tfConfig = AVAILABLE_TIMEFRAMES.find(t => t.id === state.currentTimeframe);
+                if (tfConfig && tfConfig.isKline) {
+                    fetchBinanceKlines(tfConfig.interval, tfConfig.limit);
+                } else {
+                    state.tickBuffer = [];
+                    loadLiveTickBuffer();
+                }
+            });
+        }
     }
 
     // ===================================================================
     // Initialization
     // ===================================================================
     function init() {
-        initChart();
+        initDualCharts();
+        renderTimeframeToolbar();
         setupSimulator();
         setupSettingsHandlers();
         computeMVRV();
         connectWebSocket();
+
+        // Initial load for active timeframe
+        const initialTf = AVAILABLE_TIMEFRAMES.find(t => t.id === state.currentTimeframe) || AVAILABLE_TIMEFRAMES[1];
+        if (initialTf.isKline) {
+            fetchBinanceKlines(initialTf.interval, initialTf.limit);
+        } else {
+            loadLiveTickBuffer();
+        }
 
         // Preset initial simulator price
         if (el.simPriceInput) {

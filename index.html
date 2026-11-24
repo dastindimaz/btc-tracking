@@ -297,26 +297,90 @@
             </div>
         </section>
 
-        <!-- Real-Time Chart Section -->
+        <!-- TradingView-style Dual-Pane Chart Section -->
         <section class="chart-section">
-            <div class="section-card">
-                <div class="chart-header-row">
-                    <div>
-                        <h2>Grafik Real-Time: MVRV Ratio vs Harga BTC/USD</h2>
-                        <p class="section-desc">Pembaruan per detik secara real-time langsung melalui live stream</p>
-                    </div>
-                    <div class="chart-controls">
-                        <div class="btn-group time-filters">
-                            <button class="btn-filter active" data-points="50">50 Ticks</button>
-                            <button class="btn-filter" data-points="100">100 Ticks</button>
-                            <button class="btn-filter" data-points="200">200 Ticks</button>
+            <div class="section-card tv-chart-card">
+                <!-- TradingView Toolbar -->
+                <div class="tv-toolbar">
+                    <div class="tv-toolbar-left">
+                        <div class="tv-symbol-pill">
+                            <span class="symbol-dot"></span>
+                            <strong>BTC/USD</strong>
+                            <span class="badge-source" id="chart-source-badge">BINANCE</span>
                         </div>
-                        <button id="btn-pause-chart" class="btn-secondary btn-sm">Jeda Grafik</button>
-                        <button id="btn-clear-chart" class="btn-secondary btn-sm">Bersihkan</button>
+
+                        <!-- Pinned Favorite Timeframes -->
+                        <div class="tv-tf-bar" id="tv-tf-bar">
+                            <!-- Populated dynamically by app.js with favorites like 1s, 1m, 5m, 15m, 1h, 4h, 1D -->
+                        </div>
+
+                        <!-- Dropdown to choose & star/favorite timeframes -->
+                        <div class="tv-dropdown-container">
+                            <button id="btn-tf-dropdown" class="tv-btn-icon" title="Pilih & Favoritkan Timeframe">
+                                <span>Timeframes</span>
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                            </button>
+                            <div id="tf-dropdown-menu" class="tf-dropdown-menu hidden">
+                                <div class="dropdown-header">
+                                    <span>Timeframe (Klik ⭐ untuk Favorit)</span>
+                                </div>
+                                <div class="tf-list" id="tf-options-list">
+                                    <!-- Rendered dynamically -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="tv-toolbar-right">
+                        <div class="tv-ohlc-display" id="tv-ohlc-display">
+                            <span>O: <strong id="ohlc-o" class="mono">--</strong></span>
+                            <span>H: <strong id="ohlc-h" class="mono">--</strong></span>
+                            <span>L: <strong id="ohlc-l" class="mono">--</strong></span>
+                            <span>C: <strong id="ohlc-c" class="mono">--</strong></span>
+                        </div>
+                        <button id="btn-pause-chart" class="tv-btn" title="Jeda / Lanjutkan Pembaruan">Jeda</button>
+                        <button id="btn-reset-zoom" class="tv-btn" title="Reset Tampilan">Reset</button>
                     </div>
                 </div>
-                <div class="chart-canvas-wrapper">
-                    <canvas id="realtimeChart"></canvas>
+
+                <!-- Upper Chart Pane: BTC/USD Price -->
+                <div class="tv-chart-pane tv-pane-price">
+                    <div class="tv-pane-header">
+                        <span class="pane-title">Bitcoin / US Dollar • <span id="current-tf-label">1m</span></span>
+                        <div class="pane-legend">
+                            <span class="legend-color-dot dot-orange"></span>
+                            <span>Harga Spot: <strong id="pane-price-live" class="mono font-bold">$0.00</strong></span>
+                        </div>
+                    </div>
+                    <div class="chart-canvas-wrapper price-canvas-wrap">
+                        <canvas id="priceChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Resizer / Separator Bar -->
+                <div class="tv-pane-separator">
+                    <div class="separator-line"></div>
+                    <span class="separator-label">SUB-PANEL INDIKATOR ON-CHAIN</span>
+                    <div class="separator-line"></div>
+                </div>
+
+                <!-- Lower Chart Pane: MVRV Indicator Sub-Pane -->
+                <div class="tv-chart-pane tv-pane-mvrv">
+                    <div class="tv-pane-header">
+                        <div class="pane-title-group">
+                            <span class="pane-title">MVRV Ratio</span>
+                            <span class="mvrv-tf-pill">Cost-Basis: <strong id="indicator-rp-label">$53,500</strong></span>
+                            <span class="mvrv-live-tag" id="indicator-live-tag">1.16x</span>
+                        </div>
+                        <div class="mvrv-bands-legend">
+                            <span class="band-tag top"><span class="band-dot red"></span> Top: 3.70x</span>
+                            <span class="band-tag hot"><span class="band-dot orange"></span> Overheated: 2.40x</span>
+                            <span class="band-tag break"><span class="band-dot green"></span> Breakeven: 1.00x</span>
+                        </div>
+                    </div>
+                    <div class="chart-canvas-wrapper mvrv-canvas-wrap">
+                        <canvas id="mvrvChart"></canvas>
+                    </div>
                 </div>
             </div>
         </section>
