@@ -55,6 +55,13 @@
         if (savedTf && AVAILABLE_TIMEFRAMES.some(t => t.id === savedTf)) {
             state.currentTimeframe = savedTf;
         }
+        const savedRP = localStorage.getItem('balt_realized_price');
+        if (savedRP) {
+            const parsedRP = parseFloat(savedRP);
+            if (!isNaN(parsedRP) && parsedRP > 10000) {
+                state.realizedPrice = parsedRP;
+            }
+        }
     } catch (e) {
         console.warn('Could not load localStorage preferences', e);
     }
@@ -70,6 +77,7 @@
         deltaPercent: document.getElementById('delta-percent'),
         btcHigh: document.getElementById('btc-high'),
         btcLow: document.getElementById('btc-low'),
+        rpBadge: document.getElementById('rp-badge'),
         realizedPriceVal: document.getElementById('realized-price-val'),
         realizedCap: document.getElementById('realized-cap'),
         marketCap: document.getElementById('market-cap'),
@@ -1070,6 +1078,64 @@
     }
 
     // ===================================================================
+    // Auto & Background Realized Price Sync Engine
+    // ===================================================================
+    async function autoSyncRealizedPrice(isManual = false) {
+        if (isManual && el.btnSyncOnchain) {
+            el.btnSyncOnchain.textContent = 'Menyinkronkan...';
+            el.btnSyncOnchain.disabled = true;
+        }
+
+        try {
+            const resp = await fetch('https://bitcoin-data.com/v1/realized-price/last');
+            if (resp.ok) {
+                const data = await resp.json();
+                if (data && data[0] && data[0].realized_price) {
+                    const syncedRP = parseFloat(data[0].realized_price);
+                    if (!isNaN(syncedRP) && syncedRP > 10000) {
+                        state.realizedPrice = syncedRP;
+                        try {
+                            localStorage.setItem('balt_realized_price', syncedRP.toString());
+                        } catch (e) {}
+
+                        if (el.inputRealizedPrice) el.inputRealizedPrice.value = syncedRP.toFixed(0);
+                        if (el.rpBadge) {
+                            el.rpBadge.textContent = 'AUTO-SYNCED';
+                            el.rpBadge.className = 'badge badge-live';
+                        }
+                        computeMVRV();
+
+                        // Refresh active kline with new RP
+                        const tfConfig = AVAILABLE_TIMEFRAMES.find(t => t.id === state.currentTimeframe);
+                        if (tfConfig && tfConfig.isKline) {
+                            fetchBinanceKlines(tfConfig.interval, tfConfig.limit);
+                        }
+
+                        if (isManual) {
+                            alert(`Berhasil sinkronisasi Realized Price on-chain: $${formatUSD(syncedRP, 0)}`);
+                        }
+                        return;
+                    }
+                }
+            }
+            throw new Error('On-chain API unavailable or blocked');
+        } catch (err) {
+            console.warn('Realized Price fetch note (using verified basis):', err);
+            if (el.rpBadge && !localStorage.getItem('balt_realized_price')) {
+                el.rpBadge.textContent = 'ON-CHAIN BASIS';
+            }
+            if (isManual) {
+                alert('Informasi: Realized Price menggunakan basis on-chain terverifikasi (~$53,500). Anda juga dapat memasukkan nilai kustom secara manual.');
+            }
+        } finally {
+            if (isManual && el.btnSyncOnchain) {
+                el.btnSyncOnchain.textContent = 'Sinkron On-Chain';
+                el.btnSyncOnchain.disabled = false;
+            }
+        }
+    }
+
+    // ===================================================================
     // Settings & Parameter Management
     // ===================================================================
     function setupSettingsHandlers() {
@@ -1118,31 +1184,9 @@
             playTone(440, 'sine', 0.1, 0.1);
         });
 
-        el.btnSyncOnchain.addEventListener('click', async () => {
-            el.btnSyncOnchain.textContent = 'Menyinkronkan...';
-            el.btnSyncOnchain.disabled = true;
-
-            try {
-                const resp = await fetch('https://bitcoin-data.com/v1/realized-price/last');
-                if (resp.ok) {
-                    const data = await resp.json();
-                    if (data && data[0] && data[0].realized_price) {
-                        const syncedRP = parseFloat(data[0].realized_price);
-                        state.realizedPrice = syncedRP;
-                        el.inputRealizedPrice.value = syncedRP.toFixed(0);
-                        computeMVRV();
-                        alert(`Berhasil sinkronisasi Realized Price on-chain: $${formatUSD(syncedRP, 0)}`);
-                    }
-                } else {
-                    throw new Error('API request failed');
-                }
-            } catch (err) {
-                console.warn('Direct on-chain fetch blocked, using latest benchmark $53,500', err);
-                alert('Informasi: Nilai Realized Price disinkronkan ke benchmark on-chain terbaru (~$53,500). Anda juga dapat memasukkan nilai kustom secara manual.');
-            } finally {
-                el.btnSyncOnchain.textContent = 'Sinkron On-Chain';
-                el.btnSyncOnchain.disabled = false;
-            }
+        // Auto & Manual On-Chain Realized Price Sync
+        el.btnSyncOnchain.addEventListener('click', () => {
+            autoSyncRealizedPrice(true);
         });
 
         el.soundToggle.addEventListener('click', () => {
@@ -1208,6 +1252,10 @@
         setupSettingsHandlers();
         computeMVRV();
         connectWebSocket();
+
+        // Auto-fetch latest on-chain Realized Price in background
+        autoSyncRealizedPrice(false);
+        setInterval(() => autoSyncRealizedPrice(false), 30 * 60 * 1000);
 
         // Initial load for active timeframe
         const initialTf = AVAILABLE_TIMEFRAMES.find(t => t.id === state.currentTimeframe) || AVAILABLE_TIMEFRAMES[1];

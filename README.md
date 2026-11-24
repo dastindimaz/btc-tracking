@@ -1,6 +1,6 @@
-# BTC/USD Real-Time MVRV Tracker 🚀
+# BALT - Bitcoin Accumulation Loop Theory 🚀
 
-Aplikasi pemantauan metrik on-chain **MVRV (Market Value to Realized Value)** untuk pasangan **BTC/USD** secara *real-time* (sub-detik).
+Aplikasi pemantauan metrik on-chain dan valuasi **Bitcoin Accumulation Loop Theory (BALT)** untuk pasangan **BTC/USD** secara *real-time* (sub-detik).
 
 Aplikasi ini menggabungkan *live price feed* langsung dari WebSocket bursa (Binance / Coinbase) dengan metrik basis biaya on-chain (*Realized Price*) untuk menghitung rasio valuasi pasar Bitcoin secara instan.
 
