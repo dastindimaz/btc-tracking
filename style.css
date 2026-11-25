@@ -223,50 +223,54 @@ body {
     border-color: rgba(255, 255, 255, 0.2);
 }
 
-/* Theme Dropdown Container */
-.theme-dropdown-container {
-    position: relative;
-}
-
-.theme-menu {
-    position: absolute;
-    top: 100%;
-    right: 0;
-    margin-top: 8px;
-    background: var(--bg-secondary);
-    border: 1px solid var(--border-color);
-    border-radius: var(--radius-md);
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35);
-    z-index: 120;
-    width: 140px;
-    padding: 6px 0;
-    animation: fadeIn 0.15s ease;
-}
-
-.theme-option {
+/* Theme Button Group (in Settings Panel) */
+.theme-btn-group,
+.lang-btn-group {
     display: flex;
-    align-items: center;
     gap: 8px;
-    padding: 8px 14px;
+    flex-wrap: wrap;
+}
+
+.theme-btn,
+.lang-btn {
+    flex: 1;
+    min-width: 72px;
+    padding: 8px 12px;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-secondary);
     font-size: 0.82rem;
     font-weight: 600;
     cursor: pointer;
-    color: var(--text-secondary);
-    transition: all 0.15s ease;
+    transition: all 0.2s ease;
+    text-align: center;
 }
 
-.theme-option:hover {
-    background: rgba(255, 255, 255, 0.08);
+.theme-btn:hover,
+.lang-btn:hover {
+    background: rgba(247, 147, 26, 0.1);
+    border-color: var(--btc-gold);
     color: var(--text-primary);
 }
 
-[data-theme="light"] .theme-option:hover {
-    background: rgba(15, 23, 42, 0.06);
-}
-
-.theme-option.active {
+.theme-btn.active,
+.lang-btn.active {
+    background: rgba(247, 147, 26, 0.18);
+    border-color: var(--btc-gold);
     color: var(--btc-gold);
     font-weight: 700;
+}
+
+[data-theme="light"] .theme-btn,
+[data-theme="light"] .lang-btn {
+    background: rgba(15, 23, 42, 0.04);
+    color: var(--text-secondary);
+}
+
+[data-theme="light"] .theme-btn.active,
+[data-theme="light"] .lang-btn.active {
+    background: rgba(247, 147, 26, 0.12);
 }
 
 /* Settings Divider & Telegram Section */
@@ -327,6 +331,16 @@ body {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
     gap: 18px;
+}
+
+.settings-grid-2col {
+    grid-template-columns: repeat(2, 1fr);
+}
+
+@media (max-width: 600px) {
+    .settings-grid-2col {
+        grid-template-columns: 1fr;
+    }
 }
 
 .form-group {

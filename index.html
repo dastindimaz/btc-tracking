@@ -32,7 +32,7 @@
             <div class="header-controls">
                 <div class="status-badge" id="ws-status">
                     <span class="status-dot pulse"></span>
-                    <span id="ws-status-text">Menghubungkan...</span>
+                    <span id="ws-status-text" data-i18n="status_connecting">Menghubungkan...</span>
                 </div>
 
                 <div class="clock-badge">
@@ -43,41 +43,28 @@
                     <span id="live-clock">--:--:-- UTC</span>
                 </div>
 
-                <!-- Theme Switcher (Dark, Light, System) -->
-                <div class="theme-dropdown-container">
-                    <button id="theme-toggle" class="btn-icon" title="Pilih Tema (Dark, Light, System)">
-                        <svg id="theme-icon-dark" class="hidden" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-                        </svg>
-                        <svg id="theme-icon-light" class="hidden" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <circle cx="12" cy="12" r="5"></circle>
-                            <line x1="12" y1="1" x2="12" y2="3"></line>
-                            <line x1="12" y1="21" x2="12" y2="23"></line>
-                            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
-                            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
-                            <line x1="1" y1="12" x2="3" y2="12"></line>
-                            <line x1="21" y1="12" x2="23" y2="12"></line>
-                            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
-                            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
-                        </svg>
-                        <svg id="theme-icon-system" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
-                            <line x1="8" y1="21" x2="16" y2="21"></line>
-                            <line x1="12" y1="17" x2="12" y2="21"></line>
-                        </svg>
-                    </button>
-                    <div id="theme-menu" class="theme-menu hidden">
-                        <div class="theme-option" data-theme="dark">
-                            <span>🌙 Dark</span>
-                        </div>
-                        <div class="theme-option" data-theme="light">
-                            <span>☀️ Light</span>
-                        </div>
-                        <div class="theme-option" data-theme="system">
-                            <span>💻 System</span>
-                        </div>
-                    </div>
-                </div>
+                <!-- Theme Switcher Icon (shows current theme, opens Settings) -->
+                <button id="theme-quick-btn" class="btn-icon" title="Ganti Tema — buka Pengaturan">
+                    <svg id="theme-icon-dark" class="hidden" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                    </svg>
+                    <svg id="theme-icon-light" class="hidden" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="5"></circle>
+                        <line x1="12" y1="1" x2="12" y2="3"></line>
+                        <line x1="12" y1="21" x2="12" y2="23"></line>
+                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                        <line x1="1" y1="12" x2="3" y2="12"></line>
+                        <line x1="21" y1="12" x2="23" y2="12"></line>
+                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                    </svg>
+                    <svg id="theme-icon-system" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+                        <line x1="8" y1="21" x2="16" y2="21"></line>
+                        <line x1="12" y1="17" x2="12" y2="21"></line>
+                    </svg>
+                </button>
 
                 <button id="sound-toggle" class="btn-icon" title="Toggle Suara Notifikasi">
                     <svg id="sound-icon-on" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -103,12 +90,34 @@
         <!-- Collapsible Settings Panel -->
         <div id="settings-panel" class="settings-panel hidden">
             <div class="settings-header">
-                <h3>Pengaturan Parameter On-Chain & Data Feed</h3>
+                <h3 data-i18n="settings_title">Pengaturan Parameter On-Chain &amp; Data Feed</h3>
                 <button id="close-settings" class="btn-close">&times;</button>
             </div>
+
+            <!-- Tampilan & Bahasa -->
+            <div class="settings-grid settings-grid-2col">
+                <div class="form-group">
+                    <label data-i18n="label_theme">Tema Tampilan:</label>
+                    <div class="theme-btn-group">
+                        <button class="theme-btn" data-theme="dark">🌙 Dark</button>
+                        <button class="theme-btn" data-theme="light">☀️ Light</button>
+                        <button class="theme-btn" data-theme="system">💻 System</button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label data-i18n="label_language">Bahasa / Language:</label>
+                    <div class="lang-btn-group">
+                        <button class="lang-btn" data-lang="id">🇮🇩 Indonesia</button>
+                        <button class="lang-btn" data-lang="en">🇬🇧 English</button>
+                    </div>
+                </div>
+            </div>
+            <div class="settings-divider"></div>
+
+            <!-- On-chain Parameters -->
             <div class="settings-grid">
                 <div class="form-group">
-                    <label for="input-realized-price">Realized Price (USD):</label>
+                    <label for="input-realized-price" data-i18n="label_realized_price">Realized Price (USD):</label>
                     <div class="input-with-button">
                         <input type="number" id="input-realized-price" step="100" value="53500">
                         <button id="btn-sync-onchain" class="btn-secondary" title="Cari data on-chain terbaru">Sinkron On-Chain</button>
@@ -130,8 +139,8 @@
                 <div class="form-group">
                     <label>Aksi Cepat On-Chain:</label>
                     <div class="btn-group">
-                        <button id="btn-reset-params" class="btn-secondary">Reset ke Default</button>
-                        <button id="btn-apply-params" class="btn-primary">Terapkan Perubahan</button>
+                        <button id="btn-reset-params" class="btn-secondary" data-i18n="btn_reset">Reset ke Default</button>
+                        <button id="btn-apply-params" class="btn-primary" data-i18n="btn_apply">Terapkan Perubahan</button>
                     </div>
                 </div>
             </div>
@@ -171,9 +180,7 @@
                         <button id="btn-test-telegram" class="btn-secondary" style="border-color: #0088cc; color: #0088cc;" title="Kirim pesan uji coba ke Telegram Anda">
                             ✈️ Tes Kirim
                         </button>
-                        <button id="btn-save-telegram" class="btn-primary">
-                            Simpan Telegram
-                        </button>
+                        <button id="btn-save-telegram" class="btn-primary" data-i18n="btn_save_tg">Simpan Telegram</button>
                     </div>
                     <small id="telegram-status-msg" class="text-neutral">Masukkan Chat ID &amp; Token lalu klik 'Tes Kirim'.</small>
                 </div>
@@ -185,7 +192,7 @@
             <!-- Card 1: BTC Live Price -->
             <div class="metric-card glow-card">
                 <div class="card-header">
-                    <span class="card-label">HARGA PASAR (BTC/USD)</span>
+                    <span class="card-label" data-i18n="card_price">HARGA PASAR (BTC/USD)</span>
                     <span class="badge badge-live">LIVE TICK</span>
                 </div>
                 <div class="card-body">
@@ -214,7 +221,7 @@
             <!-- Card 2: Realized Price -->
             <div class="metric-card">
                 <div class="card-header">
-                    <span class="card-label">REALIZED PRICE (RP)</span>
+                    <span class="card-label" data-i18n="card_rp">REALIZED PRICE (RP)</span>
                     <span class="badge badge-info" id="rp-badge">ON-CHAIN BASIS</span>
                 </div>
                 <div class="card-body">
@@ -241,7 +248,7 @@
             <!-- Card 3: MVRV Ratio (The Core Metric) -->
             <div class="metric-card highlight-card" id="mvrv-card">
                 <div class="card-header">
-                    <span class="card-label">MVRV RATIO (MARKET / REALIZED)</span>
+                    <span class="card-label" data-i18n="card_mvrv">MVRV RATIO (MARKET / REALIZED)</span>
                     <span class="badge" id="mvrv-condition-badge">MENGHITUNG</span>
                 </div>
                 <div class="card-body">
@@ -264,7 +271,7 @@
             <!-- Card 4: Net Unrealized Profit & Distance to Breakeven -->
             <div class="metric-card">
                 <div class="card-header">
-                    <span class="card-label">JARAK KE BREAKEVEN ON-CHAIN</span>
+                    <span class="card-label" data-i18n="card_breakeven">JARAK KE BREAKEVEN ON-CHAIN</span>
                     <span class="badge badge-secondary">SUPPORT LEVEL</span>
                 </div>
                 <div class="card-body">
@@ -289,7 +296,7 @@
             <!-- Card 5: Potential BTC Bottom Price (Historical Cycles Model) -->
             <div class="metric-card bottom-model-card" id="card-bottom-model">
                 <div class="card-header">
-                    <span class="card-label">POTENSIAL BTC BOTTOM</span>
+                    <span class="card-label" data-i18n="card_bottom">POTENSIAL BTC BOTTOM</span>
                     <span class="badge badge-bottom">HISTORIS SIKLUS</span>
                 </div>
                 <div class="card-body">
@@ -462,8 +469,8 @@
                             <span>L: <strong id="ohlc-l" class="mono">--</strong></span>
                             <span>C: <strong id="ohlc-c" class="mono">--</strong></span>
                         </div>
-                        <button id="btn-pause-chart" class="tv-btn" title="Jeda / Lanjutkan Pembaruan">Jeda</button>
-                        <button id="btn-reset-zoom" class="tv-btn" title="Reset Tampilan">Reset</button>
+                        <button id="btn-pause-chart" class="tv-btn" title="Jeda / Lanjutkan Pembaruan" data-i18n-pause="1">Jeda</button>
+                        <button id="btn-reset-zoom" class="tv-btn" title="Reset Tampilan" data-i18n="btn_reset_zoom">Reset</button>
                     </div>
                 </div>
 
