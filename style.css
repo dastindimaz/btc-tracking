@@ -29,6 +29,49 @@
     --radius-lg: 16px;
     --radius-md: 10px;
     --radius-sm: 6px;
+    --input-bg: rgba(0, 0, 0, 0.35);
+    --tv-bg: #0e1320;
+    --tv-toolbar-bg: rgba(15, 23, 42, 0.85);
+}
+
+/* Light Theme Variables */
+[data-theme="light"] {
+    --bg-primary: #f8fafc;
+    --bg-secondary: #ffffff;
+    --bg-card: rgba(255, 255, 255, 0.92);
+    --bg-card-hover: rgba(241, 245, 249, 1);
+    --border-color: rgba(15, 23, 42, 0.1);
+    --border-glow: rgba(247, 147, 26, 0.35);
+
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --text-muted: #94a3b8;
+
+    --shadow-card: 0 10px 25px -5px rgba(15, 23, 42, 0.08);
+    --input-bg: #ffffff;
+    --tv-bg: #ffffff;
+    --tv-toolbar-bg: #f1f5f9;
+}
+
+/* System Theme Preference: Light */
+@media (prefers-color-scheme: light) {
+    [data-theme="system"] {
+        --bg-primary: #f8fafc;
+        --bg-secondary: #ffffff;
+        --bg-card: rgba(255, 255, 255, 0.92);
+        --bg-card-hover: rgba(241, 245, 249, 1);
+        --border-color: rgba(15, 23, 42, 0.1);
+        --border-glow: rgba(247, 147, 26, 0.35);
+
+        --text-primary: #0f172a;
+        --text-secondary: #475569;
+        --text-muted: #94a3b8;
+
+        --shadow-card: 0 10px 25px -5px rgba(15, 23, 42, 0.08);
+        --input-bg: #ffffff;
+        --tv-bg: #ffffff;
+        --tv-toolbar-bg: #f1f5f9;
+    }
 }
 
 * {
@@ -180,6 +223,72 @@ body {
     border-color: rgba(255, 255, 255, 0.2);
 }
 
+/* Theme Dropdown Container */
+.theme-dropdown-container {
+    position: relative;
+}
+
+.theme-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 8px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.35);
+    z-index: 120;
+    width: 140px;
+    padding: 6px 0;
+    animation: fadeIn 0.15s ease;
+}
+
+.theme-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    font-size: 0.82rem;
+    font-weight: 600;
+    cursor: pointer;
+    color: var(--text-secondary);
+    transition: all 0.15s ease;
+}
+
+.theme-option:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: var(--text-primary);
+}
+
+[data-theme="light"] .theme-option:hover {
+    background: rgba(15, 23, 42, 0.06);
+}
+
+.theme-option.active {
+    color: var(--btc-gold);
+    font-weight: 700;
+}
+
+/* Settings Divider & Telegram Section */
+.settings-divider {
+    height: 1px;
+    background: var(--border-color);
+    margin: 22px 0 16px;
+}
+
+.settings-section-title {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.settings-section-title h4 {
+    font-size: 0.96rem;
+    font-weight: 700;
+    color: #0088cc;
+}
+
 /* ===================================================================
    Settings Panel
    =================================================================== */
@@ -234,7 +343,7 @@ body {
 
 .form-group input,
 .form-group select {
-    background: rgba(0, 0, 0, 0.35);
+    background: var(--input-bg);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
     padding: 8px 12px;
@@ -242,7 +351,7 @@ body {
     font-family: var(--font-mono);
     font-size: 0.9rem;
     outline: none;
-    transition: border-color 0.2s;
+    transition: border-color 0.2s, background-color 0.2s;
 }
 
 .form-group input:focus,
@@ -740,8 +849,8 @@ body {
 .tv-chart-card {
     padding: 0;
     overflow: hidden;
-    background: #0e1320;
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: var(--tv-bg);
+    border: 1px solid var(--border-color);
 }
 
 .tv-toolbar {
@@ -749,7 +858,7 @@ body {
     justify-content: space-between;
     align-items: center;
     padding: 10px 16px;
-    background: rgba(15, 23, 42, 0.85);
+    background: var(--tv-toolbar-bg);
     border-bottom: 1px solid var(--border-color);
     flex-wrap: wrap;
     gap: 12px;
@@ -1087,13 +1196,14 @@ body {
 .input-with-adornment input {
     width: 100%;
     padding: 10px 14px 10px 30px;
-    background: rgba(0, 0, 0, 0.35);
+    background: var(--input-bg);
     border: 1px solid var(--border-color);
     border-radius: var(--radius-sm);
     color: var(--text-primary);
     font-family: var(--font-mono);
     font-size: 1rem;
     outline: none;
+    transition: border-color 0.2s, background-color 0.2s;
 }
 
 .input-with-adornment input:focus {

@@ -34,6 +34,12 @@
         wsSource: 'binance',         // 'binance' | 'coinbase'
         soundEnabled: true,
         chartPaused: false,
+        theme: 'system',             // 'dark' | 'light' | 'system'
+        telegramChatId: '',
+        telegramBotToken: '',
+        telegramTrigger: 'under1',
+        telegramLastSentTime: 0,
+        telegramLastConditionFired: null,
         currentTimeframe: '1m',      // Default active timeframe
         favoriteTimeframes: ['1s', '1m', '5m', '15m', '1h', '1d'], // Pinned favorites
         klineData: [],               // Stores candles: [{time, o, h, l, c, mvrv}]
@@ -62,6 +68,10 @@
                 state.realizedPrice = parsedRP;
             }
         }
+        state.theme = localStorage.getItem('balt_theme') || 'system';
+        state.telegramChatId = localStorage.getItem('balt_tg_chat_id') || '';
+        state.telegramBotToken = localStorage.getItem('balt_tg_bot_token') || '';
+        state.telegramTrigger = localStorage.getItem('balt_tg_trigger') || 'under1';
     } catch (e) {
         console.warn('Could not load localStorage preferences', e);
     }
@@ -143,7 +153,23 @@
         ohlcL: document.getElementById('ohlc-l'),
         ohlcC: document.getElementById('ohlc-c'),
         btnPauseChart: document.getElementById('btn-pause-chart'),
-        btnResetZoom: document.getElementById('btn-reset-zoom')
+        btnResetZoom: document.getElementById('btn-reset-zoom'),
+
+        // Theme Switcher Elements
+        themeToggle: document.getElementById('theme-toggle'),
+        themeMenu: document.getElementById('theme-menu'),
+        themeIconDark: document.getElementById('theme-icon-dark'),
+        themeIconLight: document.getElementById('theme-icon-light'),
+        themeIconSystem: document.getElementById('theme-icon-system'),
+        themeOptions: document.querySelectorAll('.theme-option'),
+
+        // Telegram Notification Elements
+        inputTelegramChatId: document.getElementById('input-telegram-chat-id'),
+        inputTelegramBotToken: document.getElementById('input-telegram-bot-token'),
+        selectTelegramTrigger: document.getElementById('select-telegram-trigger'),
+        btnTestTelegram: document.getElementById('btn-test-telegram'),
+        btnSaveTelegram: document.getElementById('btn-save-telegram'),
+        telegramStatusMsg: document.getElementById('telegram-status-msg')
     };
 
     // Chart instances
@@ -290,6 +316,9 @@
             badgeColor,
             badgeBg
         });
+
+        // Check user-configured Telegram triggers
+        checkTelegramRealtimeTriggers();
     }
 
     function renderMVRVUI(data) {
@@ -1136,6 +1165,254 @@
     }
 
     // ===================================================================
+    // Theme Switcher (Dark, Light, System)
+    // ===================================================================
+    function setupThemeManager() {
+        applyTheme(state.theme);
+
+        if (el.themeToggle) {
+            el.themeToggle.addEventListener('click', (e) => {
+                e.stopPropagation();
+                el.themeMenu.classList.toggle('hidden');
+            });
+
+            document.addEventListener('click', () => {
+                if (el.themeMenu) el.themeMenu.classList.add('hidden');
+            });
+        }
+
+        if (el.themeOptions) {
+            el.themeOptions.forEach(opt => {
+                opt.addEventListener('click', () => {
+                    const chosen = opt.getAttribute('data-theme');
+                    applyTheme(chosen);
+                    if (el.themeMenu) el.themeMenu.classList.add('hidden');
+                });
+            });
+        }
+
+        // Listen for OS system theme change
+        if (window.matchMedia) {
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+                if (state.theme === 'system') {
+                    applyTheme('system');
+                }
+            });
+        }
+    }
+
+    function applyTheme(themeName) {
+        state.theme = themeName;
+        try {
+            localStorage.setItem('balt_theme', themeName);
+        } catch (e) {}
+
+        const root = document.documentElement;
+        root.setAttribute('data-theme', themeName);
+
+        // Update active class in menu
+        if (el.themeOptions) {
+            el.themeOptions.forEach(opt => {
+                if (opt.getAttribute('data-theme') === themeName) {
+                    opt.classList.add('active');
+                } else {
+                    opt.classList.remove('active');
+                }
+            });
+        }
+
+        // Update header icon
+        if (el.themeIconDark && el.themeIconLight && el.themeIconSystem) {
+            el.themeIconDark.classList.add('hidden');
+            el.themeIconLight.classList.add('hidden');
+            el.themeIconSystem.classList.add('hidden');
+
+            if (themeName === 'dark') {
+                el.themeIconDark.classList.remove('hidden');
+            } else if (themeName === 'light') {
+                el.themeIconLight.classList.remove('hidden');
+            } else {
+                el.themeIconSystem.classList.remove('hidden');
+            }
+        }
+
+        // Adjust chart colors
+        updateChartsTheme(themeName);
+    }
+
+    function updateChartsTheme(themeName) {
+        const isLight = themeName === 'light' || (themeName === 'system' && window.matchMedia && !window.matchMedia('(prefers-color-scheme: dark)').matches);
+        const gridColor = isLight ? 'rgba(0, 0, 0, 0.06)' : 'rgba(255, 255, 255, 0.03)';
+        const tickColor = isLight ? '#475569' : '#64748b';
+
+        if (priceChartInstance && priceChartInstance.options) {
+            priceChartInstance.options.scales.x.grid.color = gridColor;
+            priceChartInstance.options.scales.x.ticks.color = tickColor;
+            priceChartInstance.options.scales.y.grid.color = gridColor;
+            priceChartInstance.update('none');
+        }
+        if (mvrvChartInstance && mvrvChartInstance.options) {
+            mvrvChartInstance.options.scales.x.grid.color = gridColor;
+            mvrvChartInstance.options.scales.x.ticks.color = tickColor;
+            mvrvChartInstance.options.scales.y.grid.color = gridColor;
+            mvrvChartInstance.update('none');
+        }
+    }
+
+    // ===================================================================
+    // Telegram User Notification Engine
+    // ===================================================================
+    async function sendTelegramAlert(text) {
+        const token = (state.telegramBotToken || '').trim();
+        const chatId = (state.telegramChatId || '').trim();
+
+        if (!token || !chatId) {
+            return { success: false, message: 'Chat ID atau Bot Token belum diisi di Pengaturan.' };
+        }
+
+        const url = `https://api.telegram.org/bot${token}/sendMessage`;
+        const payload = {
+            chat_id: chatId,
+            text: text,
+            parse_mode: 'HTML'
+        };
+
+        try {
+            const resp = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await resp.json();
+            if (data.ok) {
+                return { success: true };
+            } else {
+                return { success: false, message: data.description || 'Gagal mengirim pesan.' };
+            }
+        } catch (e) {
+            return { success: false, message: e.message || 'Koneksi ke Telegram API gagal.' };
+        }
+    }
+
+    function checkTelegramRealtimeTriggers() {
+        if (!state.telegramChatId || !state.telegramBotToken) return;
+
+        const mvrv = state.mvrvRatio;
+        const trigger = state.telegramTrigger;
+        const now = Date.now();
+        // Cooldown 1 jam (3600000 ms)
+        if (now - state.telegramLastSentTime < 3600000) return;
+
+        let shouldFire = false;
+        let alertTitle = '';
+        let conditionKey = '';
+
+        if (mvrv <= 0.75 && (trigger === 'under075' || trigger === 'under1' || trigger === 'both')) {
+            shouldFire = true;
+            conditionKey = 'bottom_075';
+            alertTitle = '🚨 ALERT: BITCOIN MVRV MENYENTUH DASAR SIKLUS (≤ 0.75x)!';
+        } else if (mvrv <= 1.00 && (trigger === 'under1' || trigger === 'both')) {
+            shouldFire = true;
+            conditionKey = 'under_100';
+            alertTitle = '🚨 ALERT: BITCOIN MVRV MENEMBUS KE BAWAH 1.00x!';
+        } else if (mvrv >= 2.40 && trigger === 'both') {
+            shouldFire = true;
+            conditionKey = 'over_240';
+            alertTitle = '⚠️ ALERT: BITCOIN MVRV MEMASUKI ZONA OVERHEATED (≥ 2.40x)!';
+        }
+
+        if (shouldFire && state.telegramLastConditionFired !== conditionKey) {
+            state.telegramLastConditionFired = conditionKey;
+            state.telegramLastSentTime = now;
+
+            const timeStr = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' }) + ' WIB';
+            const discountPct = Math.abs((mvrv - 1.0) * 100).toFixed(2);
+            const msg = `⚡ <b>BALT (Bitcoin Accumulation Loop Theory)</b>\n\n` +
+                `<b>${alertTitle}</b>\n\n` +
+                `📊 <b>MVRV Ratio:</b> <code>${mvrv.toFixed(3)}x</code>\n` +
+                `💰 <b>Harga BTC:</b> <code>$${formatUSD(state.btcPrice, 2)}</code>\n` +
+                `🧱 <b>Realized Price:</b> <code>$${formatUSD(state.realizedPrice, 0)}</code>\n` +
+                `📉 <b>Deviasi dari Modal:</b> <code>${mvrv < 1 ? '-' : '+'}${discountPct}%</code>\n\n` +
+                `🕒 <b>Waktu:</b> <code>${timeStr}</code>\n` +
+                `🔗 <i>Pantau langsung: <a href="https://dastindimaz.github.io/btc-tracking/">BALT Web App</a></i>`;
+
+            sendTelegramAlert(msg);
+        }
+    }
+
+    function setupTelegramSettingsHandlers() {
+        if (el.inputTelegramChatId) el.inputTelegramChatId.value = state.telegramChatId;
+        if (el.inputTelegramBotToken) el.inputTelegramBotToken.value = state.telegramBotToken;
+        if (el.selectTelegramTrigger) el.selectTelegramTrigger.value = state.telegramTrigger;
+
+        if (el.btnSaveTelegram) {
+            el.btnSaveTelegram.addEventListener('click', () => {
+                state.telegramChatId = (el.inputTelegramChatId.value || '').trim();
+                state.telegramBotToken = (el.inputTelegramBotToken.value || '').trim();
+                state.telegramTrigger = el.selectTelegramTrigger.value;
+
+                try {
+                    localStorage.setItem('balt_tg_chat_id', state.telegramChatId);
+                    localStorage.setItem('balt_tg_bot_token', state.telegramBotToken);
+                    localStorage.setItem('balt_tg_trigger', state.telegramTrigger);
+                } catch (e) {}
+
+                if (el.telegramStatusMsg) {
+                    el.telegramStatusMsg.textContent = '✅ Konfigurasi Telegram berhasil disimpan!';
+                    el.telegramStatusMsg.className = 'text-positive';
+                }
+                playTone(523.25, 'triangle', 0.15, 0.1);
+            });
+        }
+
+        if (el.btnTestTelegram) {
+            el.btnTestTelegram.addEventListener('click', async () => {
+                const chatId = (el.inputTelegramChatId.value || '').trim();
+                const botToken = (el.inputTelegramBotToken.value || '').trim();
+
+                if (!chatId || !botToken) {
+                    if (el.telegramStatusMsg) {
+                        el.telegramStatusMsg.textContent = '⚠️ Harap isi Chat ID dan Bot Token terlebih dahulu.';
+                        el.telegramStatusMsg.className = 'text-negative';
+                    }
+                    return;
+                }
+
+                state.telegramChatId = chatId;
+                state.telegramBotToken = botToken;
+
+                if (el.telegramStatusMsg) {
+                    el.telegramStatusMsg.textContent = '⏳ Mengirim pesan tes ke Telegram...';
+                    el.telegramStatusMsg.className = 'text-neutral';
+                }
+
+                const nowWib = new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' }) + ' WIB';
+                const testMsg = `⚡ <b>BALT (Bitcoin Accumulation Loop Theory)</b>\n\n` +
+                    `✅ <b>Tes Notifikasi Berhasil!</b>\n` +
+                    `Bot Telegram Anda telah sukses terhubung ke BALT Web App.\n\n` +
+                    `📊 <b>Harga Live BTC:</b> $${formatUSD(state.btcPrice, 2)}\n` +
+                    `🧱 <b>Realized Price:</b> $${formatUSD(state.realizedPrice, 0)}\n` +
+                    `📈 <b>MVRV Saat Ini:</b> ${state.mvrvRatio.toFixed(3)}x\n\n` +
+                    `🕒 <b>Waktu:</b> ${nowWib}`;
+
+                const res = await sendTelegramAlert(testMsg);
+                if (res.success) {
+                    if (el.telegramStatusMsg) {
+                        el.telegramStatusMsg.textContent = '✅ Pesan tes terkirim! Cek notifikasi di aplikasi Telegram Anda.';
+                        el.telegramStatusMsg.className = 'text-positive';
+                    }
+                    playTone(659.25, 'sine', 0.2, 0.12);
+                } else {
+                    if (el.telegramStatusMsg) {
+                        el.telegramStatusMsg.textContent = `❌ Gagal: ${res.message}`;
+                        el.telegramStatusMsg.className = 'text-negative';
+                    }
+                }
+            });
+        }
+    }
+
+    // ===================================================================
     // Settings & Parameter Management
     // ===================================================================
     function setupSettingsHandlers() {
@@ -1247,9 +1524,11 @@
     // ===================================================================
     function init() {
         initDualCharts();
+        setupThemeManager();
         renderTimeframeToolbar();
         setupSimulator();
         setupSettingsHandlers();
+        setupTelegramSettingsHandlers();
         computeMVRV();
         connectWebSocket();
 
