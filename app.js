@@ -573,7 +573,9 @@
             state.klineData = rawKlines.map(k => {
                 const openTime = new Date(k[0]);
                 let timeStr = '';
-                if (interval.includes('d') || interval.includes('w')) {
+                if (interval === '1M') {
+                    timeStr = openTime.toLocaleDateString('id-ID', { month: 'short', year: 'numeric' });
+                } else if (interval.includes('d') || interval.includes('w')) {
                     timeStr = openTime.toLocaleDateString('id-ID', { day: '2-digit', month: 'short' });
                 } else {
                     timeStr = openTime.toTimeString().split(' ')[0].substring(0, 5); // HH:MM
@@ -625,6 +627,36 @@
     // ===================================================================
     // TradingView-Style Dual Chart.js Renderer
     // ===================================================================
+    function formatChartTooltipTitle(dataIndex) {
+        if (dataIndex < 0) return '';
+        const tfConfig = AVAILABLE_TIMEFRAMES.find(t => t.id === state.currentTimeframe);
+        const source = (tfConfig && tfConfig.isKline) ? state.klineData : state.tickBuffer;
+        const point = source && source[dataIndex];
+        if (!point) return '';
+
+        const locale = state.language === 'en' ? 'en-US' : 'id-ID';
+        if (point.timestamp) {
+            const d = new Date(point.timestamp);
+            if (state.currentTimeframe === '1M') {
+                return d.toLocaleDateString(locale, { month: 'long', year: 'numeric' });
+            }
+            if (state.currentTimeframe === '1d' || state.currentTimeframe === '1w') {
+                return d.toLocaleDateString(locale, { day: '2-digit', month: 'short', year: 'numeric' });
+            }
+            return d.toLocaleString(locale, {
+                day: '2-digit',
+                month: 'short',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            });
+        }
+
+        const todayStr = new Date().toLocaleDateString(locale, { day: '2-digit', month: 'short', year: 'numeric' });
+        return `${todayStr}, ${point.time}`;
+    }
+
     function initDualCharts() {
         const priceCanvas = document.getElementById('priceChart');
         const mvrvCanvas = document.getElementById('mvrvChart');
@@ -674,6 +706,7 @@
                         borderWidth: 1,
                         padding: 10,
                         callbacks: {
+                            title: (items) => formatChartTooltipTitle(items && items[0] ? items[0].dataIndex : -1),
                             label: (context) => `Harga BTC: $${formatUSD(context.parsed.y, 2)}`
                         }
                     }
@@ -773,6 +806,7 @@
                         borderWidth: 1,
                         padding: 8,
                         callbacks: {
+                            title: (items) => formatChartTooltipTitle(items && items[0] ? items[0].dataIndex : -1),
                             label: (context) => {
                                 if (context.datasetIndex === 0) {
                                     return `MVRV Ratio: ${context.parsed.y.toFixed(3)}x`;
