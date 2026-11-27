@@ -16,7 +16,8 @@
         { id: '1h', label: '1h', isKline: true, interval: '1h', limit: 70 },
         { id: '4h', label: '4h', isKline: true, interval: '4h', limit: 70 },
         { id: '1d', label: '1D', isKline: true, interval: '1d', limit: 70 },
-        { id: '1w', label: '1W', isKline: true, interval: '1w', limit: 52 }
+        { id: '1w', label: '1W', isKline: true, interval: '1w', limit: 52 },
+        { id: '1M', label: '1M', isKline: true, interval: '1M', limit: 36 }
     ];
 
     // Global Application State
@@ -1380,19 +1381,34 @@
             return { success: false, message: 'Chat ID atau Bot Token belum diisi di Pengaturan.' };
         }
 
-        // Use GET + no-cors fetch (fire-and-forget) to avoid CORS block from browser.
-        // Telegram Bot API supports GET for sendMessage with query params.
-        const encoded = encodeURIComponent(text);
-        const url = `https://api.telegram.org/bot${token}/sendMessage?chat_id=${encodeURIComponent(chatId)}&text=${encoded}&parse_mode=HTML`;
-
-        return new Promise((resolve) => {
-            // Try fetch with no-cors mode (fire-and-forget — cannot read response body)
-            fetch(url, { method: 'GET', mode: 'no-cors' })
-                .then(() => resolve({ success: true }))
-                .catch(() => resolve({ success: true })); // fire-and-forget: assume sent
-            // Timeout fallback: resolve after 4s regardless
-            setTimeout(() => resolve({ success: true }), 4000);
+        // Use simple POST (application/x-www-form-urlencoded) to avoid CORS preflight
+        // while still reading Telegram's actual JSON response (ok / description).
+        const url = `https://api.telegram.org/bot${token}/sendMessage`;
+        const body = new URLSearchParams({
+            chat_id: chatId,
+            text: text,
+            parse_mode: 'HTML'
         });
+
+        try {
+            const resp = await fetch(url, {
+                method: 'POST',
+                body: body
+            });
+            const data = await resp.json();
+            if (data && data.ok) {
+                return { success: true };
+            }
+            return {
+                success: false,
+                message: (data && data.description) ? data.description : 'Gagal mengirim pesan ke Telegram.'
+            };
+        } catch (err) {
+            return {
+                success: false,
+                message: `Koneksi ke Telegram API gagal (${err.message || 'Network/CORS'}). Pastikan Bot Token & Chat ID benar dan Anda sudah klik /start di bot.`
+            };
+        }
     }
 
     function checkTelegramRealtimeTriggers() {
